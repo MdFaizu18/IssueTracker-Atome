@@ -1,5 +1,6 @@
 const API_BASE_URL = 'http://localhost:8080/api';
 const PROJECTS_API_BASE_URL = 'http://localhost:8081/api';
+const ISSUES_API_BASE_URL = 'http://localhost:8082/api';
 
 function safeJsonParse(text) {
   try {
@@ -87,6 +88,75 @@ export async function getUserById(userId) {
 
 export async function getIssuesAssignedToAssignee(assigneeId) {
   return apiRequest(`/users/${assigneeId}/issues`, { method: 'GET' });
+}
+
+// Issue microservice (8082)
+export async function createIssue({
+  assignee,
+  createdBy,
+  projectId,
+  summary,
+  description,
+  priority,
+  status,
+  type,
+  sprint,
+  storyPoint,
+  tags,
+}) {
+  return apiRequestFrom(ISSUES_API_BASE_URL, '/issues', {
+    method: 'POST',
+    body: {
+      assignee,
+      createdBy,
+      projectId,
+      summary,
+      description,
+      priority,
+      status,
+      type,
+      sprint,
+      storyPoint,
+      tags,
+    },
+  });
+}
+
+export async function updateIssue(issueId, { assignee, summary, description, priority, status, type, sprint, storyPoint, tags }) {
+  return apiRequestFrom(ISSUES_API_BASE_URL, `/issues/${issueId}`, {
+    method: 'PUT',
+    body: {
+      assignee,
+      summary,
+      description,
+      priority,
+      status,
+      type,
+      sprint,
+      storyPoint,
+      tags,
+    },
+  });
+}
+
+export async function getIssueById8082(issueId) {
+  return apiRequestFrom(ISSUES_API_BASE_URL, `/issues/${issueId}`, { method: 'GET' });
+}
+
+export async function getAllIssues8082() {
+  return apiRequestFrom(ISSUES_API_BASE_URL, '/issues', { method: 'GET' });
+}
+
+export async function getIssuesByProjectId8082(projectId) {
+  return apiRequestFrom(ISSUES_API_BASE_URL, `/issues/project/${projectId}`, { method: 'GET' });
+}
+
+export async function getIssuesByAssigneeId8082(assigneeId) {
+  return apiRequestFrom(ISSUES_API_BASE_URL, `/issues/assignee/${assigneeId}`, { method: 'GET' });
+}
+
+export async function getIssuesByOwnerId8082(userId) {
+  return apiRequestFrom(ISSUES_API_BASE_URL, `/issues/owner/${userId}`, { method: 'GET' });
 }
 
 // Projects microservice (8081)

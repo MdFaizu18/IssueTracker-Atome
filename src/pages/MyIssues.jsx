@@ -4,7 +4,7 @@ import { Search, CircleDot, CheckCircle2, Clock } from 'lucide-react';
 import { StatusBadge, PriorityBadge, TypeBadge } from '../components/shared/Badges';
 import { StatCard } from '../components/shared/StatCard';
 import { cn } from '../utils/cn';
-import { getIssuesAssignedToAssignee, mapBackendIssueToUiIssue } from '../lib/api';
+import { getIssuesByAssigneeId8082, mapBackendIssueToUiIssue } from '../lib/api';
 
 const statusFilters = ['ALL', 'BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
 
@@ -47,7 +47,7 @@ export default function MyIssuesPage() {
       try {
         setIsLoading(true);
         setError('');
-        const backendIssues = await getIssuesAssignedToAssignee(userId);
+        const backendIssues = await getIssuesByAssigneeId8082(userId);
         if (cancelled) return;
         setMyIssues(Array.isArray(backendIssues) ? backendIssues.map(mapBackendIssueToUiIssue) : []);
       } catch (e) {

@@ -1,11 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, List, Columns, Filter } from 'lucide-react';
-import { mockIssues, mockProjects, getUserById } from '../data/mockData';
 import { StatusBadge, PriorityBadge, TypeBadge, TagBadge } from '../components/shared/Badges';
 import { Modal } from '../components/shared/Modal';
 import { IssueForm } from '../components/issues/IssueForm';
 import { cn } from '../utils/cn';
+import {
+  createIssue,
+  getAllIssues8082,
+  getAllUsers,
+  getProjectsByOwner,
+  mapBackendIssueToUiIssue,
+  mapBackendProjectToUiProject,
+  mapBackendUserToUiUser,
+  updateIssue,
+} from '../lib/api';
 
 const statusColumns = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
 
@@ -17,65 +26,184 @@ const statusLabels = {
   DONE: 'Done',
 };
 
+const AUTH_STORAGE_KEY = 'auth_user';
+
+function getUserIdFromLocalStorage() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.userId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTagsForBackend(tags) {
+  if (!tags) return '';
+  if (Array.isArray(tags)) return tags.join(',');
+  return String(tags);
+}
+
 export default function IssuesPage() {
-  const [issues, setIssues] = useState(mockIssues);
+  const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
+
+  const [issues, setIssues] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('kanban');
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // In this page, we filter by user's project list.
   const [filterProject, setFilterProject] = useState('');
 
-  const filteredIssues = issues.filter(issue => {
-    const matchesSearch = issue.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      issue.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesProject = !filterProject || issue.projectId === filterProject;
-    return matchesSearch && matchesProject;
-  });
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleCreateIssue = (data) => {
-    const newIssue = {
-      id: String(issues.length + 1),
-      summary: data.summary || '',
-      description: data.description || '',
-      priority: data.priority || 'MEDIUM',
-      status: data.status || 'TODO',
-      type: data.type || 'TASK',
-      sprint: data.sprint || '',
-      storyPoints: data.storyPoints || 0,
-      tags: data.tags || [],
-      assigneeId: data.assigneeId || '',
-      projectId: data.projectId || '',
-      createdAt: new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0],
+  const userId = useMemo(() => getUserIdFromLocalStorage(), []);
+
+  const assignees = useMemo(() => users.filter((u) => u.role === 'ASSIGNEE'), [users]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!userId) return;
+      setIsLoading(true);
+      setError('');
+      try {
+        const [backendProjects, backendUsers, backendIssues] = await Promise.all([
+          getProjectsByOwner(userId),
+          getAllUsers(),
+          getAllIssues8082(),
+        ]);
+
+        if (cancelled) return;
+
+        const mappedProjects = Array.isArray(backendProjects)
+          ? backendProjects.map(mapBackendProjectToUiProject)
+          : [];
+        const mappedUsers = Array.isArray(backendUsers) ? backendUsers.map(mapBackendUserToUiUser) : [];
+        const mappedIssues = Array.isArray(backendIssues) ? backendIssues.map(mapBackendIssueToUiIssue) : [];
+
+        const projectIds = new Set(mappedProjects.map((p) => String(p.projectId ?? p.id)));
+
+        // Only show issues related to projects the user created + issues created by the user.
+        const relevantIssues = mappedIssues.filter((i) => {
+          const projectMatch = projectIds.has(String(i.projectId));
+          const ownerMatch = String(i.createdBy) === String(userId);
+          return projectMatch || ownerMatch;
+        });
+
+        setProjects(mappedProjects);
+        setUsers(mappedUsers);
+        setIssues(relevantIssues);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e?.message || 'Failed to load issues');
+        setProjects([]);
+        setUsers([]);
+        setIssues([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
     };
-    setIssues([...issues, newIssue]);
-    setIsCreateModalOpen(false);
+  }, [userId]);
+
+  const filteredIssues = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return issues.filter((issue) => {
+      const matchesSearch =
+        issue.summary?.toLowerCase().includes(q) || issue.description?.toLowerCase().includes(q);
+      const matchesProject = !filterProject || String(issue.projectId) === String(filterProject);
+      return matchesSearch && matchesProject;
+    });
+  }, [issues, searchQuery, filterProject]);
+
+  const defaultProjectId = projects?.[0]?.projectId ?? projects?.[0]?.id ?? '';
+
+  const handleCreateIssue = async (formData) => {
+    if (!userId) return;
+
+    const payload = {
+      assignee: formData.assigneeId ? Number(formData.assigneeId) : null,
+      createdBy: userId,
+      projectId: formData.projectId ? Number(formData.projectId) : null,
+      summary: formData.summary,
+      description: formData.description,
+      priority: formData.priority,
+      status: formData.status,
+      type: formData.type,
+      sprint: formData.sprint,
+      storyPoint: Number(formData.storyPoints),
+      tags: normalizeTagsForBackend(formData.tags),
+    };
+
+    setIsLoading(true);
+    setError('');
+    try {
+      const backendIssue = await createIssue(payload);
+      const uiIssue = mapBackendIssueToUiIssue(backendIssue);
+      setIssues((prev) => [uiIssue, ...prev]);
+      setIsCreateModalOpen(false);
+    } catch (e) {
+      setError(e?.message || 'Failed to create issue');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDragStart = (e, issueId) => {
-    e.dataTransfer.setData('issueId', issueId);
+    e.dataTransfer.setData('issueId', String(issueId));
   };
 
   const handleDragOver = (e) => {
     e.preventDefault();
   };
 
-  const handleDrop = (e, newStatus) => {
+  const handleDrop = async (e, newStatus) => {
     e.preventDefault();
     const issueId = e.dataTransfer.getData('issueId');
-    setIssues(issues.map(issue =>
-      issue.id === issueId ? { ...issue, status: newStatus, updatedAt: new Date().toISOString().split('T')[0] } : issue
-    ));
+    const existing = issues.find((i) => String(i.id) === String(issueId));
+    if (!existing) return;
+
+    const payload = {
+      assignee: existing.assigneeId ? Number(existing.assigneeId) : null,
+      summary: existing.summary,
+      description: existing.description,
+      priority: existing.priority,
+      status: newStatus,
+      type: existing.type,
+      sprint: existing.sprint,
+      storyPoint: Number(existing.storyPoints),
+      tags: normalizeTagsForBackend(existing.tags),
+    };
+
+    // Optimistic UI update
+    setIssues((prev) =>
+      prev.map((i) => (String(i.id) === String(issueId) ? { ...i, status: newStatus } : i))
+    );
+
+    try {
+      const backendIssue = await updateIssue(issueId, payload);
+      const uiIssue = mapBackendIssueToUiIssue(backendIssue);
+      setIssues((prev) => prev.map((i) => (String(i.id) === String(issueId) ? uiIssue : i)));
+    } catch {
+      // If backend fails, we keep the optimistic update (could be improved with rollback).
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Issues</h1>
-          <p className="mt-1 text-muted-foreground">
-            Track and manage all project issues
-          </p>
+          <p className="mt-1 text-muted-foreground">Track and manage your issues</p>
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
@@ -86,7 +214,6 @@ export default function IssuesPage() {
         </button>
       </div>
 
-      {/* Filters and View Toggle */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -108,8 +235,8 @@ export default function IssuesPage() {
               className="pl-10 pr-4 py-2 rounded-lg bg-input border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
             >
               <option value="">All Projects</option>
-              {mockProjects.map(project => (
-                <option key={project.id} value={project.id}>
+              {projects.map((project) => (
+                <option key={String(project.projectId ?? project.id)} value={project.projectId ?? project.id}>
                   {project.name}
                 </option>
               ))}
@@ -121,7 +248,9 @@ export default function IssuesPage() {
               onClick={() => setViewMode('list')}
               className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                viewMode === 'list' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'
+                viewMode === 'list'
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               )}
             >
               <List className="w-4 h-4" />
@@ -131,7 +260,9 @@ export default function IssuesPage() {
               onClick={() => setViewMode('kanban')}
               className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                viewMode === 'kanban' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'
+                viewMode === 'kanban'
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               )}
             >
               <Columns className="w-4 h-4" />
@@ -141,7 +272,12 @@ export default function IssuesPage() {
         </div>
       </div>
 
-      {/* List View */}
+      {error && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          {error}
+        </div>
+      )}
+
       {viewMode === 'list' && (
         <div className="rounded-xl bg-card border border-border overflow-hidden">
           <div className="overflow-x-auto">
@@ -157,9 +293,17 @@ export default function IssuesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
+                {filteredIssues.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                      {isLoading ? 'Loading issues...' : 'No issues found'}
+                    </td>
+                  </tr>
+                )}
                 {filteredIssues.map((issue) => {
-                  const assignee = getUserById(issue.assigneeId);
-                  const project = mockProjects.find(p => p.id === issue.projectId);
+                  const assignee = users.find((u) => String(u.userId) === String(issue.assigneeId));
+                  const project = projects.find((p) => String(p.projectId ?? p.id) === String(issue.projectId));
+
                   return (
                     <tr key={issue.id} className="hover:bg-accent/30 transition-colors">
                       <td className="py-3 px-4">
@@ -207,19 +351,13 @@ export default function IssuesPage() {
               </tbody>
             </table>
           </div>
-          {filteredIssues.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground">
-              No issues found
-            </div>
-          )}
         </div>
       )}
 
-      {/* Kanban View */}
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {statusColumns.map((status) => {
-            const columnIssues = filteredIssues.filter(i => i.status === status);
+            const columnIssues = filteredIssues.filter((i) => i.status === status);
             return (
               <div
                 key={status}
@@ -237,7 +375,7 @@ export default function IssuesPage() {
                 </div>
                 <div className="space-y-3 min-h-[200px] p-2 rounded-lg bg-muted/30">
                   {columnIssues.map((issue) => {
-                    const assignee = getUserById(issue.assigneeId);
+                    const assignee = users.find((u) => String(u.userId) === String(issue.assigneeId));
                     return (
                       <Link
                         key={issue.id}
@@ -254,7 +392,7 @@ export default function IssuesPage() {
                           {issue.summary}
                         </p>
                         <div className="flex flex-wrap gap-1 mb-3">
-                          {issue.tags.slice(0, 2).map(tag => (
+                          {issue.tags.slice(0, 2).map((tag) => (
                             <TagBadge key={tag} tag={tag} />
                           ))}
                           {issue.tags.length > 2 && (
@@ -283,15 +421,21 @@ export default function IssuesPage() {
         </div>
       )}
 
-      {/* Create Modal */}
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         title="Create New Issue"
         size="lg"
       >
-        <IssueForm onSubmit={handleCreateIssue} onCancel={() => setIsCreateModalOpen(false)} />
+        <IssueForm
+          onSubmit={handleCreateIssue}
+          onCancel={() => setIsCreateModalOpen(false)}
+          defaultProjectId={defaultProjectId}
+          projects={projects}
+          assignees={assignees}
+        />
       </Modal>
     </div>
   );
 }
+

@@ -1,12 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { mockUsers, mockProjects } from '../../data/mockData';
 
 const statuses = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 const types = ['BUG', 'FEATURE', 'TASK', 'STORY', 'EPIC'];
 
-export function IssueForm({ issue, onSubmit, onCancel, defaultProjectId }) {
+export function IssueForm({
+  issue,
+  onSubmit,
+  onCancel,
+  defaultProjectId,
+  projects = [],
+  assignees = [],
+}) {
+  const initialProjectId =
+    issue?.projectId ??
+    defaultProjectId ??
+    projects?.[0]?.projectId ??
+    projects?.[0]?.id ??
+    '';
+
+  const initialAssigneeId = issue?.assigneeId ?? assignees?.[0]?.userId ?? assignees?.[0]?.id ?? '';
+
   const [formData, setFormData] = useState({
     summary: issue?.summary || '',
     description: issue?.description || '',
@@ -16,8 +31,8 @@ export function IssueForm({ issue, onSubmit, onCancel, defaultProjectId }) {
     sprint: issue?.sprint || '',
     storyPoints: issue?.storyPoints || 0,
     tags: issue?.tags || [],
-    assigneeId: issue?.assigneeId || '',
-    projectId: issue?.projectId || defaultProjectId || '',
+    assigneeId: issue?.assigneeId ?? initialAssigneeId,
+    projectId: initialProjectId,
   });
   const [tagInput, setTagInput] = useState('');
 
@@ -54,7 +69,23 @@ export function IssueForm({ issue, onSubmit, onCancel, defaultProjectId }) {
     onSubmit(formData);
   };
 
-  const assignees = mockUsers.filter(u => u.role === 'ASSIGNEE');
+  useEffect(() => {
+    // When editing different issues, keep the form in sync.
+    if (!issue) return;
+    setFormData({
+      summary: issue?.summary || '',
+      description: issue?.description || '',
+      priority: issue?.priority || 'MEDIUM',
+      status: issue?.status || 'TODO',
+      type: issue?.type || 'TASK',
+      sprint: issue?.sprint || '',
+      storyPoints: issue?.storyPoints || 0,
+      tags: issue?.tags || [],
+      assigneeId: issue?.assigneeId ?? '',
+      projectId: issue?.projectId ?? initialProjectId,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue?.id]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -162,12 +193,18 @@ export function IssueForm({ issue, onSubmit, onCancel, defaultProjectId }) {
             className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
             required
           >
-            <option value="">Select project</option>
-            {mockProjects.map(project => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
+            {projects.length === 0 ? (
+              <option value="">No projects available</option>
+            ) : (
+              projects.map((project) => {
+                const projectBackendId = project.projectId ?? project.id;
+                return (
+                  <option key={String(projectBackendId)} value={projectBackendId}>
+                    {project.name}
+                  </option>
+                );
+              })
+            )}
           </select>
         </div>
       </div>
@@ -216,12 +253,18 @@ export function IssueForm({ issue, onSubmit, onCancel, defaultProjectId }) {
           onChange={handleChange}
           className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
         >
-          <option value="">Unassigned</option>
-          {assignees.map(assignee => (
-            <option key={assignee.id} value={assignee.id}>
-              {assignee.name}
-            </option>
-          ))}
+            {assignees.length === 0 ? (
+              <option value="">No assignees available</option>
+            ) : (
+              assignees.map((assignee) => {
+                const userBackendId = assignee.userId ?? assignee.id;
+                return (
+                  <option key={String(userBackendId)} value={userBackendId}>
+                    {assignee.name}
+                  </option>
+                );
+              })
+            )}
         </select>
       </div>
 
