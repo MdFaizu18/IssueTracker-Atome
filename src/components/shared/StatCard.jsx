@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { cn } from '../../utils/cn';
 
 export function StatCard({ title, value, icon: Icon, trend, className }) {

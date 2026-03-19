@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -11,6 +11,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -20,14 +21,16 @@ const navItems = [
   { href: '/my-issues', label: 'My Issues', icon: ClipboardList },
 ];
 
-const bottomNavItems = [
-  { href: '#', label: 'Settings', icon: Settings },
-  { href: '#', label: 'Help', icon: HelpCircle },
-];
-
 export function Sidebar() {
   const location = useLocation();
   const pathname = location.pathname;
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -65,7 +68,10 @@ export function Sidebar() {
 
       {/* Bottom Navigation */}
       <div className="px-3 py-4 border-t border-sidebar-border space-y-1">
-       <button  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-md hover:bg-accent transition-colors">
+       <button
+         onClick={handleLogout}
+         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-md hover:bg-accent transition-colors"
+       >
         <LogOut className="w-4 h-4" />
         Logout
        </button>

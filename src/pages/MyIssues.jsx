@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, CircleDot, CheckCircle2, Clock } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { mockIssues, getProjectById } from '../data/mockData';
 import { StatusBadge, PriorityBadge, TypeBadge } from '../components/shared/Badges';
 import { StatCard } from '../components/shared/StatCard';
 import { cn } from '../utils/cn';
+import { getIssuesAssignedToAssignee, mapBackendIssueToUiIssue } from '../lib/api';
 
 const statusFilters = ['ALL', 'BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
 
@@ -18,23 +17,72 @@ const statusLabels = {
   DONE: 'Done',
 };
 
+const AUTH_STORAGE_KEY = 'auth_user';
+
+function getUserIdFromLocalStorage() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.userId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function MyIssuesPage() {
-  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [myIssues, setMyIssues] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const myIssues = mockIssues.filter(issue => issue.assigneeId === user?.id);
-  
-  const filteredIssues = myIssues.filter(issue => {
-    const matchesSearch = issue.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      issue.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || issue.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  useEffect(() => {
+    const userId = getUserIdFromLocalStorage();
+    if (!userId) return;
 
-  const completedCount = myIssues.filter(i => i.status === 'DONE').length;
-  const inProgressCount = myIssues.filter(i => i.status === 'IN_PROGRESS').length;
-  const pendingCount = myIssues.filter(i => i.status === 'TODO' || i.status === 'BACKLOG').length;
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsLoading(true);
+        setError('');
+        const backendIssues = await getIssuesAssignedToAssignee(userId);
+        if (cancelled) return;
+        setMyIssues(Array.isArray(backendIssues) ? backendIssues.map(mapBackendIssueToUiIssue) : []);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e?.message || 'Failed to load your issues');
+        setMyIssues([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filteredIssues = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return myIssues.filter((issue) => {
+      const matchesSearch =
+        issue.summary?.toLowerCase().includes(q) || issue.description?.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === 'ALL' || issue.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [myIssues, searchQuery, statusFilter]);
+
+  const completedCount = useMemo(() => myIssues.filter((i) => i.status === 'DONE').length, [myIssues]);
+  const inProgressCount = useMemo(
+    () => myIssues.filter((i) => i.status === 'IN_PROGRESS').length,
+    [myIssues]
+  );
+  const pendingCount = useMemo(
+    () => myIssues.filter((i) => i.status === 'TODO' || i.status === 'BACKLOG').length,
+    [myIssues]
+  );
 
   return (
     <div className="space-y-6">
@@ -45,6 +93,12 @@ export default function MyIssuesPage() {
           Issues assigned to you across all projects
         </p>
       </div>
+
+      {error && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -99,9 +153,10 @@ export default function MyIssuesPage() {
       {/* Issues List */}
       <div className="rounded-xl bg-card border border-border">
         <div className="divide-y divide-border">
-          {filteredIssues.length > 0 ? (
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground">Loading issues...</div>
+          ) : filteredIssues.length > 0 ? (
             filteredIssues.map((issue) => {
-              const project = getProjectById(issue.projectId);
               return (
                 <Link
                   key={issue.id}
@@ -112,11 +167,11 @@ export default function MyIssuesPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-mono text-muted-foreground">#{issue.id}</span>
                       <TypeBadge type={issue.type} />
-                      {project && (
+                      {issue.projectId ? (
                         <span className="text-xs px-2 py-0.5 rounded bg-accent text-accent-foreground">
-                          {project.name}
+                          Project {issue.projectId}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     <p className="mt-1 font-medium text-foreground">{issue.summary}</p>
                     <p className="mt-1 text-sm text-muted-foreground line-clamp-1">

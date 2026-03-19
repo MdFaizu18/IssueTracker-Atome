@@ -1,15 +1,49 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FolderKanban, CircleDot, ClipboardList, CheckCircle2, ArrowRight, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { mockProjects, mockIssues, getUserById } from '../data/mockData';
 import { StatCard } from '../components/shared/StatCard';
 import { StatusBadge, PriorityBadge, TypeBadge } from '../components/shared/Badges';
+import { getIssuesAssignedToAssignee, mapBackendIssueToUiIssue } from '../lib/api';
 
 export default function DashboardPage() {
   const { user } = useAuth();
 
-  const assignedIssues = mockIssues.filter(issue => issue.assigneeId === user?.id);
-  const completedIssues = mockIssues.filter(issue => issue.status === 'DONE');
+  const [assignedIssues, setAssignedIssues] = useState([]);
+  const [isLoadingAssigned, setIsLoadingAssigned] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const storedRaw =
+        typeof window !== 'undefined' ? window.localStorage.getItem('auth_user') : null;
+      const storedUser = storedRaw ? JSON.parse(storedRaw) : null;
+      const userId = storedUser?.userId ?? user?.userId ?? user?.id;
+      if (!userId) return;
+
+      try {
+        setIsLoadingAssigned(true);
+        const backendIssues = await getIssuesAssignedToAssignee(userId);
+        if (cancelled) return;
+        setAssignedIssues(
+          Array.isArray(backendIssues) ? backendIssues.map(mapBackendIssueToUiIssue) : []
+        );
+      } finally {
+        if (!cancelled) setIsLoadingAssigned(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.userId]);
+
+  const completedIssues = useMemo(
+    () => assignedIssues.filter((issue) => issue.status === 'DONE'),
+    [assignedIssues]
+  );
   const recentIssues = [...mockIssues]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 5);
@@ -172,7 +206,9 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="divide-y divide-border">
-            {assignedIssues.length > 0 ? (
+            {isLoadingAssigned ? (
+              <div className="p-8 text-center text-muted-foreground">Loading assigned issues...</div>
+            ) : assignedIssues.length > 0 ? (
               assignedIssues.slice(0, 4).map((issue) => (
                 <Link
                   key={issue.id}

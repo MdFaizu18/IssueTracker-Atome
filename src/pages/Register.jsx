@@ -41,7 +41,7 @@ export default function RegisterPage() {
     setIsLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const success = register(
+    const success = await register(
       formData.name,
       formData.email,
       formData.password,
@@ -50,7 +50,8 @@ export default function RegisterPage() {
     );
 
     if (success) {
-      navigate('/dashboard');
+      // Per your requirement: after register redirect to login
+      navigate('/login');
     } else {
       setError('Registration failed. Please try again.');
     }

@@ -1,16 +1,44 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Mail, Calendar } from 'lucide-react';
-import { mockUsers, mockIssues } from '../data/mockData';
 import { RoleBadge } from '../components/shared/Badges';
+import { getAllUsers, mapBackendUserToUiUser } from '../lib/api';
 
 export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [users, setUsers] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const filteredUsers = mockUsers.filter(user =>
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsLoading(true);
+        setError('');
+        const backendUsers = await getAllUsers();
+        if (cancelled) return;
+        setUsers(Array.isArray(backendUsers) ? backendUsers.map(mapBackendUserToUiUser) : []);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e?.message || 'Failed to load users');
+        setUsers([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return users.filter(
+      (user) => user.name?.toLowerCase().includes(q) || user.email?.toLowerCase().includes(q)
+    );
+  }, [searchQuery, users]);
 
   return (
     <div className="space-y-6">
@@ -21,6 +49,12 @@ export default function UsersPage() {
           Team members and their roles
         </p>
       </div>
+
+      {error && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -36,10 +70,15 @@ export default function UsersPage() {
 
       {/* Users Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredUsers.map((user) => {
-          const assignedIssues = mockIssues.filter(i => i.assigneeId === user.id);
-          const completedIssues = assignedIssues.filter(i => i.status === 'DONE');
-          
+        {isLoading ? (
+          <div className="col-span-full p-8 text-center text-muted-foreground">Loading users...</div>
+        ) : (
+          filteredUsers.map((user) => {
+            // This page only fetches users. If you want assigned/completed counts too,
+            // we can add another endpoint call per user.
+            const assignedIssuesCount = 0;
+            const completedIssuesCount = 0;
+
           return (
             <Link
               key={user.id}
@@ -71,11 +110,11 @@ export default function UsersPage() {
               <div className="mt-4 pt-4 border-t border-border">
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div>
-                    <p className="text-2xl font-bold text-foreground">{assignedIssues.length}</p>
+                    <p className="text-2xl font-bold text-foreground">{assignedIssuesCount}</p>
                     <p className="text-xs text-muted-foreground">Assigned</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-success">{completedIssues.length}</p>
+                    <p className="text-2xl font-bold text-success">{completedIssuesCount}</p>
                     <p className="text-xs text-muted-foreground">Completed</p>
                   </div>
                 </div>
@@ -83,11 +122,12 @@ export default function UsersPage() {
               
               <div className="mt-4 flex items-center gap-1 text-xs text-muted-foreground">
                 <Calendar className="w-3.5 h-3.5" />
-                Joined {new Date(user.createdAt).toLocaleDateString()}
+                Joined {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
               </div>
             </Link>
           );
-        })}
+          })
+        )}
       </div>
 
       {filteredUsers.length === 0 && (
