@@ -1,16 +1,123 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, User, Plus, Pencil } from 'lucide-react';
-import { getProjectById, getUserById, getIssuesByProject, mockProjects } from '../data/mockData';
+import {
+  getAllUsers,
+  getIssuesInProject,
+  getProjectById,
+  mapBackendIssueToUiIssue,
+  mapBackendProjectToUiProject,
+  mapBackendUserToUiUser,
+  updateProject,
+} from '../lib/api';
 import { StatusBadge, PriorityBadge, TypeBadge } from '../components/shared/Badges';
 import { Modal } from '../components/shared/Modal';
 import { ProjectForm } from '../components/projects/ProjectForm';
 
 export default function ProjectDetailsPage() {
   const { id } = useParams();
-  const [project, setProject] = useState(getProjectById(id));
+
+  const [project, setProject] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [issues, setIssues] = useState([]);
+
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const owner = useMemo(() => {
+    if (!project) return null;
+    return users.find((u) => String(u.userId) === String(project.ownerId)) ?? null;
+  }, [project, users]);
+
+  const completedIssues = useMemo(
+    () => issues.filter((i) => i.status === 'DONE'),
+    [issues]
+  );
+  const progress = useMemo(() => {
+    if (!issues.length) return 0;
+    return Math.round((completedIssues.length / issues.length) * 100);
+  }, [issues.length, completedIssues.length]);
+
+  const statusCounts = useMemo(
+    () => ({
+      BACKLOG: issues.filter((i) => i.status === 'BACKLOG').length,
+      TODO: issues.filter((i) => i.status === 'TODO').length,
+      IN_PROGRESS: issues.filter((i) => i.status === 'IN_PROGRESS').length,
+      IN_REVIEW: issues.filter((i) => i.status === 'IN_REVIEW').length,
+      DONE: issues.filter((i) => i.status === 'DONE').length,
+    }),
+    [issues]
+  );
+
+  const refresh = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const [backendUsers, backendProject, backendIssues] = await Promise.all([
+        getAllUsers(),
+        getProjectById(id),
+        getIssuesInProject(id),
+      ]);
+
+      setUsers(Array.isArray(backendUsers) ? backendUsers.map(mapBackendUserToUiUser) : []);
+      setProject(mapBackendProjectToUiProject(backendProject));
+      setIssues(Array.isArray(backendIssues) ? backendIssues.map(mapBackendIssueToUiIssue) : []);
+    } catch (e) {
+      setError(e?.message || 'Failed to load project');
+      setProject(null);
+      setIssues([]);
+      setUsers([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const handleEditProject = async (data) => {
+    if (!project) return;
+    setIsLoading(true);
+    setError('');
+    try {
+      const backend = await updateProject(project.projectId ?? project.id, {
+        projectName: data.projectName,
+        startDate: data.startDate,
+        endDate: data.endDate,
+      });
+      setProject(mapBackendProjectToUiProject(backend));
+      setIsEditModalOpen(false);
+      await refresh();
+    } catch (e) {
+      setError(e?.message || 'Failed to update project');
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading && !project) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <p className="text-muted-foreground">Loading project...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          {error}
+        </div>
+        <Link to="/projects" className="mt-4 text-primary hover:underline">
+          Back to Projects
+        </Link>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
@@ -21,32 +128,6 @@ export default function ProjectDetailsPage() {
       </div>
     );
   }
-
-  const owner = getUserById(project.ownerId);
-  const issues = getIssuesByProject(project.id);
-  const completedIssues = issues.filter(i => i.status === 'DONE');
-  const progress = issues.length > 0 
-    ? Math.round((completedIssues.length / issues.length) * 100) 
-    : 0;
-
-  const statusCounts = {
-    BACKLOG: issues.filter(i => i.status === 'BACKLOG').length,
-    TODO: issues.filter(i => i.status === 'TODO').length,
-    IN_PROGRESS: issues.filter(i => i.status === 'IN_PROGRESS').length,
-    IN_REVIEW: issues.filter(i => i.status === 'IN_REVIEW').length,
-    DONE: issues.filter(i => i.status === 'DONE').length,
-  };
-
-  const handleEditProject = (data) => {
-    const updatedProject = { ...project, ...data };
-    setProject(updatedProject);
-    // Update in mock data
-    const index = mockProjects.findIndex(p => p.id === project.id);
-    if (index !== -1) {
-      mockProjects[index] = updatedProject;
-    }
-    setIsEditModalOpen(false);
-  };
 
   return (
     <div className="space-y-6">
@@ -63,7 +144,7 @@ export default function ProjectDetailsPage() {
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
-          <p className="text-muted-foreground max-w-2xl">{project.description}</p>
+          <p className="text-muted-foreground max-w-2xl">{project.description || 'No description'}</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -92,13 +173,11 @@ export default function ProjectDetailsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Start Date</p>
-              <p className="font-medium text-foreground">
-                {new Date(project.startDate).toLocaleDateString()}
-              </p>
+              <p className="font-medium text-foreground">{new Date(project.startDate).toLocaleDateString()}</p>
             </div>
           </div>
         </div>
-        
+
         <div className="p-4 rounded-xl bg-card border border-border">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
@@ -106,9 +185,7 @@ export default function ProjectDetailsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">End Date</p>
-              <p className="font-medium text-foreground">
-                {new Date(project.endDate).toLocaleDateString()}
-              </p>
+              <p className="font-medium text-foreground">{new Date(project.endDate).toLocaleDateString()}</p>
             </div>
           </div>
         </div>
@@ -120,6 +197,7 @@ export default function ProjectDetailsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Owner</p>
+              {/* Owner name is resolved by matching projectOwner(userId) with users.userId */}
               <p className="font-medium text-foreground">{owner?.name || 'Unknown'}</p>
             </div>
           </div>
@@ -130,10 +208,7 @@ export default function ProjectDetailsPage() {
             <p className="text-sm text-muted-foreground">Progress</p>
             <p className="text-2xl font-bold text-foreground mt-1">{progress}%</p>
             <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
-              <div 
-                className="h-full bg-primary rounded-full"
-                style={{ width: `${progress}%` }}
-              />
+              <div className="h-full bg-primary rounded-full" style={{ width: `${progress}%` }} />
             </div>
           </div>
         </div>
@@ -161,7 +236,8 @@ export default function ProjectDetailsPage() {
         <div className="divide-y divide-border">
           {issues.length > 0 ? (
             issues.map((issue) => {
-              const assignee = getUserById(issue.assigneeId);
+              const assignee = users.find((u) => String(u.userId) === String(issue.assigneeId)) ?? null;
+
               return (
                 <Link
                   key={issue.id}
@@ -193,9 +269,7 @@ export default function ProjectDetailsPage() {
               );
             })
           ) : (
-            <div className="p-8 text-center text-muted-foreground">
-              No issues found for this project
-            </div>
+            <div className="p-8 text-center text-muted-foreground">No issues found for this project</div>
           )}
         </div>
       </div>
@@ -207,12 +281,9 @@ export default function ProjectDetailsPage() {
         title="Edit Project"
         size="lg"
       >
-        <ProjectForm 
-          project={project} 
-          onSubmit={handleEditProject} 
-          onCancel={() => setIsEditModalOpen(false)} 
-        />
+        <ProjectForm project={project} onSubmit={handleEditProject} onCancel={() => setIsEditModalOpen(false)} />
       </Modal>
     </div>
   );
 }
+

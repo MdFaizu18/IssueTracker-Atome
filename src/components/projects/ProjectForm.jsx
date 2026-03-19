@@ -1,13 +1,10 @@
 import { useState } from 'react';
-import { mockUsers } from '../../data/mockData';
 
 export function ProjectForm({ project, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
     name: project?.name || '',
-    description: project?.description || '',
     startDate: project?.startDate || '',
     endDate: project?.endDate || '',
-    ownerId: project?.ownerId || '',
   });
 
   const handleChange = (e) => {
@@ -19,10 +16,12 @@ export function ProjectForm({ project, onSubmit, onCancel }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    onSubmit({
+      projectName: formData.name,
+      startDate: formData.startDate,
+      endDate: formData.endDate,
+    });
   };
-
-  const projectOwners = mockUsers.filter(u => u.role === 'PROJECT_OWNER');
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -38,22 +37,6 @@ export function ProjectForm({ project, onSubmit, onCancel }) {
           onChange={handleChange}
           placeholder="Enter project name"
           className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <label htmlFor="description" className="text-sm font-medium text-foreground">
-          Description
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          placeholder="Describe the project"
-          rows={3}
-          className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all resize-none"
           required
         />
       </div>
@@ -88,27 +71,6 @@ export function ProjectForm({ project, onSubmit, onCancel }) {
             required
           />
         </div>
-      </div>
-
-      <div className="space-y-2">
-        <label htmlFor="ownerId" className="text-sm font-medium text-foreground">
-          Project Owner
-        </label>
-        <select
-          id="ownerId"
-          name="ownerId"
-          value={formData.ownerId}
-          onChange={handleChange}
-          className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-          required
-        >
-          <option value="">Select owner</option>
-          {projectOwners.map(owner => (
-            <option key={owner.id} value={owner.id}>
-              {owner.name}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="flex justify-end gap-3 pt-4 border-t border-border">

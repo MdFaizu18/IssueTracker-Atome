@@ -1,48 +1,158 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, Calendar, MoreHorizontal, Pencil, Trash2, Eye } from 'lucide-react';
-import { mockProjects, mockIssues, getUserById } from '../data/mockData';
 import { Modal } from '../components/shared/Modal';
 import { ProjectForm } from '../components/projects/ProjectForm';
+import {
+  createProject,
+  deleteProject,
+  getAllUsers,
+  getIssuesInProject,
+  getProjectsByOwner,
+  mapBackendIssueToUiIssue,
+  mapBackendProjectToUiProject,
+  mapBackendUserToUiUser,
+  updateProject,
+} from '../lib/api';
+
+const AUTH_STORAGE_KEY = 'auth_user';
+
+function getUserIdFromLocalStorage() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.userId ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [projects, setProjects] = useState(mockProjects);
+  const [projects, setProjects] = useState([]);
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [projectStatsById, setProjectStatsById] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const filteredProjects = projects.filter(project =>
-    project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProjects = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return projects.filter(
+      (project) =>
+        project.name?.toLowerCase().includes(q) ||
+        project.description?.toLowerCase().includes(q)
+    );
+  }, [projects, searchQuery]);
 
-  const handleCreateProject = (data) => {
-    const newProject = {
-      id: String(projects.length + 1),
-      name: data.name || '',
-      description: data.description || '',
-      startDate: data.startDate || new Date().toISOString().split('T')[0],
-      endDate: data.endDate || '',
-      ownerId: data.ownerId || '1',
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setProjects([...projects, newProject]);
-    setIsCreateModalOpen(false);
-  };
+  const refresh = async () => {
+    const userId = getUserIdFromLocalStorage();
+    if (!userId) return;
 
-  const handleEditProject = (data) => {
-    if (editingProject) {
-      setProjects(projects.map(p => 
-        p.id === editingProject.id ? { ...p, ...data } : p
-      ));
-      setEditingProject(null);
+    setIsLoading(true);
+    setError('');
+    try {
+      const [backendUsers, backendProjects] = await Promise.all([getAllUsers(), getProjectsByOwner(userId)]);
+      const mappedUsers = Array.isArray(backendUsers) ? backendUsers.map(mapBackendUserToUiUser) : [];
+      const mappedProjects = Array.isArray(backendProjects)
+        ? backendProjects.map(mapBackendProjectToUiProject)
+        : [];
+
+      setUsers(mappedUsers);
+      setProjects(mappedProjects);
+
+      const statsResults = await Promise.all(
+        mappedProjects.map(async (p) => {
+          const backendIssues = await getIssuesInProject(p.projectId ?? p.id);
+          const uiIssues = Array.isArray(backendIssues) ? backendIssues.map(mapBackendIssueToUiIssue) : [];
+          const issuesCount = uiIssues.length;
+          const completedCount = uiIssues.filter((i) => i.status === 'DONE').length;
+          const progress = issuesCount > 0 ? Math.round((completedCount / issuesCount) * 100) : 0;
+          return { projectId: p.projectId ?? p.id, issuesCount, progress };
+        })
+      );
+
+      const statsMap = {};
+      for (const s of statsResults) {
+        statsMap[String(s.projectId)] = { issuesCount: s.issuesCount, progress: s.progress };
+      }
+      setProjectStatsById(statsMap);
+    } catch (e) {
+      setError(e?.message || 'Failed to load projects');
+      setProjects([]);
+      setUsers([]);
+      setProjectStatsById({});
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleDeleteProject = (id) => {
-    setProjects(projects.filter(p => p.id !== id));
-    setActiveDropdown(null);
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const handleCreateProject = async (data) => {
+    const userId = getUserIdFromLocalStorage();
+    if (!userId) return;
+
+    setIsLoading(true);
+    setError('');
+    try {
+      const backend = await createProject({
+        projectOwner: userId,
+        projectName: data.projectName,
+        startDate: data.startDate,
+        endDate: data.endDate,
+      });
+      const created = mapBackendProjectToUiProject(backend);
+      setProjects((prev) => [created, ...prev]);
+      setIsCreateModalOpen(false);
+      await refresh();
+    } catch (e) {
+      setError(e?.message || 'Failed to create project');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditProject = async (data) => {
+    if (!editingProject) return;
+    setIsLoading(true);
+    setError('');
+    try {
+      const backend = await updateProject(editingProject.projectId ?? editingProject.id, {
+        projectName: data.projectName,
+        startDate: data.startDate,
+        endDate: data.endDate,
+      });
+      const updated = mapBackendProjectToUiProject(backend);
+      setProjects((prev) =>
+        prev.map((p) => (p.id === updated.id ? updated : p))
+      );
+      setEditingProject(null);
+      setIsLoading(false);
+      await refresh();
+    } catch (e) {
+      setError(e?.message || 'Failed to update project');
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteProject = async (projectId) => {
+    setIsLoading(true);
+    setError('');
+    try {
+      await deleteProject(projectId);
+      setActiveDropdown(null);
+      await refresh();
+    } catch (e) {
+      setError(e?.message || 'Failed to delete project');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -92,13 +202,19 @@ export default function ProjectsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredProjects.map((project) => {
-                const owner = getUserById(project.ownerId);
-                const projectIssues = mockIssues.filter(i => i.projectId === project.id);
-                const completedIssues = projectIssues.filter(i => i.status === 'DONE');
-                const progress = projectIssues.length > 0 
-                  ? Math.round((completedIssues.length / projectIssues.length) * 100) 
-                  : 0;
+              {isLoading && filteredProjects.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-muted-foreground">
+                    Loading projects...
+                  </td>
+                </tr>
+              ) : (
+                filteredProjects.map((project) => {
+                const owner = users.find((u) => String(u.userId) === String(project.ownerId));
+                const stats = projectStatsById[String(project.projectId ?? project.id)] || {
+                  issuesCount: 0,
+                  progress: 0,
+                };
 
                 return (
                   <tr key={project.id} className="hover:bg-accent/30 transition-colors">
@@ -123,31 +239,29 @@ export default function ProjectsPage() {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      {owner && (
+                      {owner ? (
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-full overflow-hidden bg-muted">
-                            <img
-                              src={owner.profileImage}
-                              alt={owner.name}
-                              className="w-full h-full object-cover"
-                            />
+                            <img src={owner.profileImage} alt={owner.name} className="w-full h-full object-cover" />
                           </div>
                           <span className="text-sm text-foreground">{owner.name}</span>
                         </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Unknown</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="text-sm text-foreground">{projectIssues.length}</span>
+                      <span className="text-sm text-foreground">{stats.issuesCount}</span>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
                           <div 
                             className="h-full bg-primary rounded-full"
-                            style={{ width: `${progress}%` }}
+                            style={{ width: `${stats.progress}%` }}
                           />
                         </div>
-                        <span className="text-sm text-muted-foreground">{progress}%</span>
+                        <span className="text-sm text-muted-foreground">{stats.progress}%</span>
                       </div>
                     </td>
                     <td className="py-3 px-4 text-right">
@@ -198,7 +312,8 @@ export default function ProjectsPage() {
                     </td>
                   </tr>
                 );
-              })}
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -208,6 +323,12 @@ export default function ProjectsPage() {
           </div>
         )}
       </div>
+
+      {error && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Create Modal */}
       <Modal
