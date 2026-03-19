@@ -13,7 +13,7 @@ import {
   mapBackendIssueToUiIssue,
   mapBackendProjectToUiProject,
   mapBackendUserToUiUser,
-  updateIssue,
+  updateIssueStatus,
 } from '../lib/api';
 
 const statusColumns = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
@@ -172,17 +172,7 @@ export default function IssuesPage() {
     const existing = issues.find((i) => String(i.id) === String(issueId));
     if (!existing) return;
 
-    const payload = {
-      assignee: existing.assigneeId ? Number(existing.assigneeId) : null,
-      summary: existing.summary,
-      description: existing.description,
-      priority: existing.priority,
-      status: newStatus,
-      type: existing.type,
-      sprint: existing.sprint,
-      storyPoint: Number(existing.storyPoints),
-      tags: normalizeTagsForBackend(existing.tags),
-    };
+    const previousStatus = existing.status;
 
     // Optimistic UI update
     setIssues((prev) =>
@@ -190,11 +180,26 @@ export default function IssuesPage() {
     );
 
     try {
-      const backendIssue = await updateIssue(issueId, payload);
-      const uiIssue = mapBackendIssueToUiIssue(backendIssue);
-      setIssues((prev) => prev.map((i) => (String(i.id) === String(issueId) ? uiIssue : i)));
-    } catch {
-      // If backend fails, we keep the optimistic update (could be improved with rollback).
+      await updateIssueStatus(issueId, newStatus);
+
+      // If backend accepted, we re-sync that issue status by re-fetching the list.
+      // This avoids cases where backend normalizes/overwrites status values.
+      setError('');
+      const backendIssues = await getAllIssues8082();
+      const mappedIssues = Array.isArray(backendIssues) ? backendIssues.map(mapBackendIssueToUiIssue) : [];
+
+      const projectIds = new Set(projects.map((p) => String(p.projectId ?? p.id)));
+      const relevantIssues = mappedIssues.filter((i) => {
+        const projectMatch = projectIds.has(String(i.projectId));
+        const ownerMatch = String(i.createdBy) === String(userId);
+        return projectMatch || ownerMatch;
+      });
+      setIssues(relevantIssues);
+    } catch (err) {
+      const msg = err?.message || 'Failed to update issue status';
+      setError(msg);
+      // Rollback optimistic change
+      setIssues((prev) => prev.map((i) => (String(i.id) === String(issueId) ? { ...i, status: previousStatus } : i)));
     }
   };
 

@@ -139,6 +139,16 @@ export async function updateIssue(issueId, { assignee, summary, description, pri
   });
 }
 
+// Minimal update: backend only needs status
+export async function updateIssueStatus(issueId, status) {
+  return apiRequestFrom(ISSUES_API_BASE_URL, `/issues/${issueId}`, {
+    method: 'PUT',
+    body: {
+      status,
+    },
+  });
+}
+
 export async function getIssueById8082(issueId) {
   return apiRequestFrom(ISSUES_API_BASE_URL, `/issues/${issueId}`, { method: 'GET' });
 }
