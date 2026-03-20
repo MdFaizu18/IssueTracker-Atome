@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 
 // Pages
@@ -14,6 +14,18 @@ import UsersPage from './pages/Users';
 import UserProfilePage from './pages/UserProfile';
 import MyIssuesPage from './pages/MyIssues';
 
+function RoleBasedDefaultRedirect() {
+  const { user } = useAuth();
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (user.role === 'ASSIGNEE') return <Navigate to="/my-issues" replace />;
+  if (user.role === 'PROJECT_OWNER') return <Navigate to="/projects" replace />;
+  if (user.role === 'ADMIN') return <Navigate to="/users" replace />;
+
+  return <Navigate to="/dashboard" replace />;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -25,7 +37,7 @@ function App() {
           
           {/* App Routes with Layout */}
           <Route path="/" element={<AppLayout />}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route index element={<RoleBasedDefaultRedirect />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:id" element={<ProjectDetailsPage />} />
@@ -37,7 +49,7 @@ function App() {
           </Route>
 
           {/* Fallback */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<RoleBasedDefaultRedirect />} />
         </Routes>
       </Router>
     </AuthProvider>

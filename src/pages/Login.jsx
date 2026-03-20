@@ -21,7 +21,8 @@ export default function LoginPage() {
 
     const success = await login(email, password);
     if (success) {
-      navigate('/dashboard');
+      // Go to `/` so RoleBasedDefaultRedirect loads the correct page.
+      navigate('/');
     } else {
       setError('Invalid email or password. Try: alex@company.com');
     }
