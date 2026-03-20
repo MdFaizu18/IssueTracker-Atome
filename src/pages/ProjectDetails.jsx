@@ -31,7 +31,7 @@ export default function ProjectDetailsPage() {
   }, [project, users]);
 
   const completedIssues = useMemo(
-    () => issues.filter((i) => i.status === 'DONE'),
+    () => issues.filter((i) => i.status === 'COMPLETED'),
     [issues]
   );
   const progress = useMemo(() => {
@@ -41,11 +41,10 @@ export default function ProjectDetailsPage() {
 
   const statusCounts = useMemo(
     () => ({
-      BACKLOG: issues.filter((i) => i.status === 'BACKLOG').length,
       TODO: issues.filter((i) => i.status === 'TODO').length,
-      IN_PROGRESS: issues.filter((i) => i.status === 'IN_PROGRESS').length,
-      IN_REVIEW: issues.filter((i) => i.status === 'IN_REVIEW').length,
-      DONE: issues.filter((i) => i.status === 'DONE').length,
+      TESTING: issues.filter((i) => i.status === 'TESTING').length,
+      DEVELOPMENT: issues.filter((i) => i.status === 'DEVELOPMENT').length,
+      COMPLETED: issues.filter((i) => i.status === 'COMPLETED').length,
     }),
     [issues]
   );

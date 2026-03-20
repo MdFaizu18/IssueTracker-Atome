@@ -6,15 +6,14 @@ import { StatCard } from '../components/shared/StatCard';
 import { cn } from '../utils/cn';
 import { getIssuesByAssigneeId8082, mapBackendIssueToUiIssue } from '../lib/api';
 
-const statusFilters = ['ALL', 'BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
+const statusFilters = ['ALL', 'TODO', 'TESTING', 'DEVELOPMENT', 'COMPLETED'];
 
 const statusLabels = {
   ALL: 'All',
-  BACKLOG: 'Backlog',
   TODO: 'To Do',
-  IN_PROGRESS: 'In Progress',
-  IN_REVIEW: 'In Review',
-  DONE: 'Done',
+  DEVELOPMENT: 'Development',
+  TESTING: 'Testing',
+  COMPLETED: 'Completed',
 };
 
 const AUTH_STORAGE_KEY = 'auth_user';
@@ -22,7 +21,7 @@ const AUTH_STORAGE_KEY = 'auth_user';
 function getUserIdFromLocalStorage() {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed?.userId ?? null;
@@ -74,13 +73,13 @@ export default function MyIssuesPage() {
     });
   }, [myIssues, searchQuery, statusFilter]);
 
-  const completedCount = useMemo(() => myIssues.filter((i) => i.status === 'DONE').length, [myIssues]);
+  const completedCount = useMemo(() => myIssues.filter((i) => i.status === 'COMPLETED').length, [myIssues]);
   const inProgressCount = useMemo(
-    () => myIssues.filter((i) => i.status === 'IN_PROGRESS').length,
+    () => myIssues.filter((i) => i.status === 'DEVELOPMENT').length,
     [myIssues]
   );
   const pendingCount = useMemo(
-    () => myIssues.filter((i) => i.status === 'TODO' || i.status === 'BACKLOG').length,
+    () => myIssues.filter((i) => i.status === 'TODO').length,
     [myIssues]
   );
 

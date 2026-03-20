@@ -17,10 +17,10 @@ import {
 
 const AUTH_STORAGE_KEY = 'auth_user';
 
-function getUserIdFromLocalStorage() {
+function getUserIdFromSessionStorage() {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed?.userId ?? null;
@@ -50,7 +50,7 @@ export default function ProjectsPage() {
   }, [projects, searchQuery]);
 
   const refresh = async () => {
-    const userId = getUserIdFromLocalStorage();
+    const userId = getUserIdFromSessionStorage();
     if (!userId) return;
 
     setIsLoading(true);
@@ -70,7 +70,7 @@ export default function ProjectsPage() {
           const backendIssues = await getIssuesInProject(p.projectId ?? p.id);
           const uiIssues = Array.isArray(backendIssues) ? backendIssues.map(mapBackendIssueToUiIssue) : [];
           const issuesCount = uiIssues.length;
-          const completedCount = uiIssues.filter((i) => i.status === 'DONE').length;
+          const completedCount = uiIssues.filter((i) => i.status === 'COMPLETED').length;
           const progress = issuesCount > 0 ? Math.round((completedCount / issuesCount) * 100) : 0;
           return { projectId: p.projectId ?? p.id, issuesCount, progress };
         })
@@ -96,7 +96,7 @@ export default function ProjectsPage() {
   }, []);
 
   const handleCreateProject = async (data) => {
-    const userId = getUserIdFromLocalStorage();
+    const userId = getUserIdFromSessionStorage();
     if (!userId) return;
 
     setIsLoading(true);

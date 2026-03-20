@@ -16,22 +16,21 @@ import {
   updateIssueStatus,
 } from '../lib/api';
 
-const statusColumns = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
+const statusColumns = ['TODO', 'TESTING', 'DEVELOPMENT', 'COMPLETED'];
 
 const statusLabels = {
-  BACKLOG: 'Backlog',
   TODO: 'To Do',
-  IN_PROGRESS: 'In Progress',
-  IN_REVIEW: 'In Review',
-  DONE: 'Done',
+  DEVELOPMENT: 'Development',
+  TESTING: 'Testing',
+  COMPLETED: 'Completed',
 };
 
 const AUTH_STORAGE_KEY = 'auth_user';
 
-function getUserIdFromLocalStorage() {
+function getUserIdFromSessionStorage() {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed?.userId ?? null;
@@ -61,7 +60,7 @@ export default function IssuesPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const userId = useMemo(() => getUserIdFromLocalStorage(), []);
+  const userId = useMemo(() => getUserIdFromSessionStorage(), []);
 
   const assignees = useMemo(() => users.filter((u) => u.role === 'ASSIGNEE'), [users]);
 
@@ -171,6 +170,25 @@ export default function IssuesPage() {
     const issueId = e.dataTransfer.getData('issueId');
     const existing = issues.find((i) => String(i.id) === String(issueId));
     if (!existing) return;
+
+    // Role gating: ASSIGNEE can only change status on issues assigned to them
+    const userRole = (() => {
+      try {
+        const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw)?.role ?? null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const canEditStatus =
+      userRole !== 'ASSIGNEE' || String(existing.assigneeId) === String(userId);
+
+    if (!canEditStatus) {
+      setError('You can only move your own assigned issues.');
+      return;
+    }
 
     const previousStatus = existing.status;
 

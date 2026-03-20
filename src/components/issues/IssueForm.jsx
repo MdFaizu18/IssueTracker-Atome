@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 
-const statuses = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
+const statuses = ['TODO', 'TESTING', 'DEVELOPMENT', 'COMPLETED'];
+const statusLabels = {
+  TODO: 'To Do',
+  DEVELOPMENT: 'Development',
+  TESTING: 'Testing',
+  COMPLETED: 'Completed',
+};
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 const types = ['BUG', 'FEATURE', 'TASK', 'STORY', 'EPIC'];
 
@@ -12,6 +18,8 @@ export function IssueForm({
   defaultProjectId,
   projects = [],
   assignees = [],
+  statusOnlyEdit = false,
+  canEditStatus = false,
 }) {
   const initialProjectId =
     issue?.projectId ??
@@ -99,6 +107,7 @@ export function IssueForm({
           type="text"
           value={formData.summary}
           onChange={handleChange}
+          disabled={statusOnlyEdit}
           placeholder="Issue summary"
           className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
           required
@@ -114,6 +123,7 @@ export function IssueForm({
           name="description"
           value={formData.description}
           onChange={handleChange}
+          disabled={statusOnlyEdit}
           placeholder="Describe the issue in detail"
           rows={4}
           className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all resize-none"
@@ -131,6 +141,7 @@ export function IssueForm({
             name="type"
             value={formData.type}
             onChange={handleChange}
+            disabled={statusOnlyEdit}
             className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
           >
             {types.map(type => (
@@ -150,6 +161,7 @@ export function IssueForm({
             name="priority"
             value={formData.priority}
             onChange={handleChange}
+            disabled={statusOnlyEdit}
             className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
           >
             {priorities.map(priority => (
@@ -171,11 +183,12 @@ export function IssueForm({
             name="status"
             value={formData.status}
             onChange={handleChange}
+            disabled={statusOnlyEdit ? !canEditStatus : false}
             className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
           >
             {statuses.map(status => (
               <option key={status} value={status}>
-                {status.replace('_', ' ').split(' ').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')}
+                {statusLabels[status] || status}
               </option>
             ))}
           </select>
@@ -190,6 +203,7 @@ export function IssueForm({
             name="projectId"
             value={formData.projectId}
             onChange={handleChange}
+            disabled={statusOnlyEdit}
             className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
             required
           >
@@ -220,6 +234,7 @@ export function IssueForm({
             type="text"
             value={formData.sprint}
             onChange={handleChange}
+            disabled={statusOnlyEdit}
             placeholder="e.g., Sprint 5"
             className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
           />
@@ -237,6 +252,7 @@ export function IssueForm({
             max="21"
             value={formData.storyPoints}
             onChange={handleChange}
+            disabled={statusOnlyEdit}
             className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
           />
         </div>
@@ -251,6 +267,7 @@ export function IssueForm({
           name="assigneeId"
           value={formData.assigneeId}
           onChange={handleChange}
+          disabled={statusOnlyEdit}
           className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
         >
             {assignees.length === 0 ? (
@@ -272,33 +289,53 @@ export function IssueForm({
         <label htmlFor="tags" className="text-sm font-medium text-foreground">
           Tags
         </label>
-        <input
-          id="tags"
-          type="text"
-          value={tagInput}
-          onChange={(e) => setTagInput(e.target.value)}
-          onKeyDown={handleAddTag}
-          placeholder="Type and press Enter to add tags"
-          className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-        />
-        {formData.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {formData.tags.map(tag => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-accent text-accent-foreground"
-              >
-                {tag}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveTag(tag)}
-                  className="hover:text-destructive"
+
+        {statusOnlyEdit ? (
+          formData.tags.length > 0 ? (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {formData.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-accent text-accent-foreground"
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No tags</p>
+          )
+        ) : (
+          <>
+            <input
+              id="tags"
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={handleAddTag}
+              placeholder="Type and press Enter to add tags"
+              className="w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+            />
+            {formData.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {formData.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-accent text-accent-foreground"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="hover:text-destructive"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 

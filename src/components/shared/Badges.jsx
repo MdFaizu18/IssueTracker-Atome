@@ -1,15 +1,28 @@
 import { cn } from '../../utils/cn';
 
 const statusConfig = {
-  BACKLOG: { label: 'Backlog', className: 'bg-muted text-muted-foreground' },
+  // New DB statuses
   TODO: { label: 'To Do', className: 'bg-info/20 text-info' },
-  IN_PROGRESS: { label: 'In Progress', className: 'bg-warning/20 text-warning' },
-  IN_REVIEW: { label: 'In Review', className: 'bg-chart-5/20 text-chart-5' },
-  DONE: { label: 'Done', className: 'bg-success/20 text-success' },
+  DEVELOPMENT: { label: 'Development', className: 'bg-warning/20 text-warning' },
+  TESTING: { label: 'Testing', className: 'bg-chart-5/20 text-chart-5' },
+  COMPLETED: { label: 'Completed', className: 'bg-success/20 text-success' },
+
+  // Backward-compatible (older mock/UI values)
+  BACKLOG: { label: 'To Do', className: 'bg-info/20 text-info' },
+  IN_PROGRESS: { label: 'Development', className: 'bg-warning/20 text-warning' },
+  IN_REVIEW: { label: 'Testing', className: 'bg-chart-5/20 text-chart-5' },
+  DONE: { label: 'Completed', className: 'bg-success/20 text-success' },
 };
 
 export function StatusBadge({ status, className }) {
   const config = statusConfig[status];
+  if (!config) {
+    return (
+      <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground', className)}>
+        {status || 'Unknown'}
+      </span>
+    );
+  }
   return (
     <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', config.className, className)}>
       {config.label}

@@ -17,7 +17,7 @@ export default function DashboardPage() {
     let cancelled = false;
     const load = async () => {
       const storedRaw =
-        typeof window !== 'undefined' ? window.localStorage.getItem('auth_user') : null;
+        typeof window !== 'undefined' ? window.sessionStorage.getItem('auth_user') : null;
       const storedUser = storedRaw ? JSON.parse(storedRaw) : null;
       const userId = storedUser?.userId ?? user?.userId ?? user?.id;
       if (!userId) return;
@@ -41,7 +41,7 @@ export default function DashboardPage() {
   }, [user?.id, user?.userId]);
 
   const completedIssues = useMemo(
-    () => assignedIssues.filter((issue) => issue.status === 'DONE'),
+    () => assignedIssues.filter((issue) => issue.status === 'COMPLETED'),
     [assignedIssues]
   );
   const recentIssues = [...mockIssues]
@@ -160,7 +160,7 @@ export default function DashboardPage() {
               const owner = getUserById(project.ownerId);
               const projectIssues = mockIssues.filter(i => i.projectId === project.id);
               const progress = Math.round(
-                (projectIssues.filter(i => i.status === 'DONE').length / projectIssues.length) * 100
+                (projectIssues.filter(i => i.status === 'COMPLETED').length / projectIssues.length) * 100
               ) || 0;
               
               return (

@@ -8,6 +8,7 @@ import {
   mapBackendIssueToUiIssue,
   mapBackendProjectToUiProject,
   mapBackendUserToUiUser,
+  updateIssueStatus,
   updateIssue,
 } from '../lib/api';
 import { StatusBadge, PriorityBadge, TypeBadge, TagBadge } from '../components/shared/Badges';
@@ -16,10 +17,10 @@ import { IssueForm } from '../components/issues/IssueForm';
 
 const AUTH_STORAGE_KEY = 'auth_user';
 
-function getUserIdFromLocalStorage() {
+function getUserIdFromSessionStorage() {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed?.userId ?? null;
@@ -45,7 +46,7 @@ export default function IssueDetailsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const userId = useMemo(() => getUserIdFromLocalStorage(), []);
+  const userId = useMemo(() => getUserIdFromSessionStorage(), []);
   const assignees = useMemo(() => users.filter((u) => u.role === 'ASSIGNEE'), [users]);
 
   const ownerProject = useMemo(() => {
@@ -92,9 +93,38 @@ export default function IssueDetailsPage() {
     return users.find((u) => String(u.userId) === String(issue.assigneeId)) ?? null;
   }, [issue, users]);
 
+  const userRole = useMemo(() => {
+    try {
+      const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw)?.role ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const canEditStatusOnly =
+    userRole === 'ASSIGNEE' && String(issue?.assigneeId) === String(userId);
+
   const handleEditIssue = async (formData) => {
     if (!issue) return;
     if (!userId) return;
+
+    if (canEditStatusOnly) {
+      setIsLoading(true);
+      setError('');
+      try {
+        const backend = await updateIssueStatus(issue.id, formData.status);
+        const updated = mapBackendIssueToUiIssue(backend);
+        setIssue(updated);
+        setIsEditModalOpen(false);
+      } catch (e) {
+        setError(e?.message || 'Failed to update status');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
 
     const payload = {
       assignee: formData.assigneeId ? Number(formData.assigneeId) : null,
@@ -326,6 +356,8 @@ export default function IssueDetailsPage() {
           defaultProjectId={issue.projectId}
           projects={projects}
           assignees={assignees}
+          statusOnlyEdit={!!canEditStatusOnly}
+          canEditStatus={!!canEditStatusOnly}
         />
       </Modal>
     </div>

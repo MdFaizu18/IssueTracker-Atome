@@ -15,7 +15,7 @@ const AUTH_STORAGE_KEY = 'auth_user';
 function getUserIdFromLocalStorage() {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed?.userId ?? null;
@@ -67,15 +67,15 @@ export default function UserProfilePage() {
 
   const assignedIssues = useMemo(() => issues, [issues]);
   const completedIssues = useMemo(
-    () => assignedIssues.filter((i) => i.status === 'DONE'),
+    () => assignedIssues.filter((i) => i.status === 'COMPLETED'),
     [assignedIssues]
   );
   const inProgressIssues = useMemo(
-    () => assignedIssues.filter((i) => i.status === 'IN_PROGRESS'),
+    () => assignedIssues.filter((i) => i.status === 'DEVELOPMENT'),
     [assignedIssues]
   );
   const todoIssues = useMemo(
-    () => assignedIssues.filter((i) => i.status === 'TODO' || i.status === 'BACKLOG'),
+    () => assignedIssues.filter((i) => i.status === 'TODO'),
     [assignedIssues]
   );
 

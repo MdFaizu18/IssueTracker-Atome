@@ -7,7 +7,7 @@ const AUTH_STORAGE_KEY = 'auth_user';
 function loadAuthUserFromStorage() {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return mapBackendUserToUiUser(parsed);
@@ -18,12 +18,12 @@ function loadAuthUserFromStorage() {
 
 function storeAuthUserInStorage(backendUser) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(backendUser));
+  window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(backendUser));
 }
 
 function clearAuthStorage() {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
 const AuthContext = createContext(undefined);

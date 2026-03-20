@@ -13,24 +13,36 @@ import {
 import { cn } from '../../utils/cn';
 import { useAuth } from '../../context/AuthContext';
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/projects', label: 'Projects', icon: FolderKanban },
-  { href: '/issues', label: 'Issues', icon: CircleDot },
-  { href: '/users', label: 'Users', icon: Users },
-  { href: '/my-issues', label: 'My Issues', icon: ClipboardList },
-];
-
 export function Sidebar() {
   const location = useLocation();
   const pathname = location.pathname;
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  const role = user?.role;
+  const navItems =
+    role === 'ASSIGNEE'
+      ? [
+          { href: '/my-issues', label: 'My Issues', icon: ClipboardList },
+        ]
+      : role === 'PROJECT_OWNER'
+        ? [
+            { href: '/projects', label: 'Projects', icon: FolderKanban },
+            { href: '/issues', label: 'Issues', icon: CircleDot },
+          ]
+        : role === 'ADMIN'
+          ? [
+              { href: '/projects', label: 'Projects', icon: FolderKanban },
+              { href: '/users', label: 'Users', icon: Users },
+            ]
+          : [
+              { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            ];
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
